@@ -17,9 +17,29 @@ use glium::{
     VertexBuffer,
     program::{Program, ProgramCreationInput},
     index::{self, IndexBuffer},
+    backend::Facade,
 };
-use glium::backend::glutin::glutin::os::macos::WindowBuilderExt;
-use glium::backend::Facade;
+
+trait WindowBuilderOsSpecific: Sized {
+    fn os_specific_window_configure(self) -> Self;
+}
+
+#[cfg(target_os = "macos")]
+impl WindowBuilderOsSpecific for glutin::WindowBuilder {
+    fn os_specific_window_configure(self) -> Self {
+        use glium::backend::glutin::glutin::os::macos::WindowBuilderExt;
+
+        self
+            .with_movable_by_window_background(true)
+    }
+}
+
+#[cfg(not(target_os = "macos"))]
+impl WindowBuilderOsSpecific for glutin::WindowBuilder {
+    fn os_specific_window_configure(self) -> Self {
+        self
+    }
+}
 
 #[derive(Copy, Clone)]
 #[repr(C)]
@@ -42,10 +62,10 @@ fn main() {
     let display: Display = {
         let wb = glutin::WindowBuilder::new()
             .with_dimensions(dpi::LogicalSize::new(x_size as _, y_size as _))
-            .with_movable_by_window_background(true)
             .with_decorations(true)
             .with_transparency(true)
             .with_resizable(false)
+            .os_specific_window_configure()
             .with_title("software rendering");
         let cb = glutin::ContextBuilder::new()
             .with_vsync(true);
@@ -212,6 +232,29 @@ void main() {
                     ..
                 }, .. } => {
                     // cmd+w
+                    open = false;
+                }
+
+                Event::DeviceEvent { event: DeviceEvent::Key(
+                    KeyboardInput {
+                        virtual_keycode: Some(VirtualKeyCode::W),
+                        modifiers: ModifiersState { ctrl: true, .. },
+                        ..
+                    }
+                ), .. } => {
+                    // ctrl+w
+                    open = false;
+                },
+
+                Event::WindowEvent { event: WindowEvent::KeyboardInput {
+                    input: KeyboardInput {
+                        virtual_keycode: Some(VirtualKeyCode::W),
+                        modifiers: ModifiersState { ctrl: true, .. },
+                        ..
+                    },
+                    ..
+                }, .. } => {
+                    // ctrl+w
                     open = false;
                 }
 
