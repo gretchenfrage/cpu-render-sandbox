@@ -16,7 +16,7 @@ pub extern crate rayon;
 pub extern crate vek;
 
 /// Concurrent per-fragment painting.
-pub mod fragment;
+pub mod frag;
 
 /// Displaying pixels in an opengl window.
 mod window;
