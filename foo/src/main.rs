@@ -34,7 +34,7 @@ fn main() {
     }
 
     let state = State {
-        cam_pos: Vec3::new(-5.0, -5.0, -5.0),
+        cam_pos: Vec3::new(-5.0, 5.0, -5.0),
         cam_dir: Vec3::new(0.5, -0.5, 1.0).normalized(),
         //cam_dir: Vec3::forward_lh(),
         cam_fov: 90.0_f32.to_radians(),
@@ -94,8 +94,10 @@ fn main() {
                 .map(|c| c >= 0.0 && c <= 1.0)
                 .reduce_and());
 
+            let mut hits = 0;
+
             // raytrace loop
-            'outer_loop: for _ in 0..10 {
+            'outer_loop: for _ in 0..100 {
                 let planes: Vec3<f32> = direction.ceil();
                 debug_assert!(planes
                     .map(|c| c == 0.0 || c == 1.0)
@@ -177,9 +179,26 @@ fn main() {
                     .map(|c| c >= -0.00001 && c <= 1.00001)
                     .reduce_and());
 
+                // collision
+                if voxel.partial_cmpge(&Vec3::new(0, 0, 0)).reduce_and() &&
+                    voxel.partial_cmplt(&Vec3::new(5, 5, 5)).reduce_and() {
+
+                    hits += 1;
+
+                }
+
                 // println!("shazam! {:#?}", (ingress, voxel));
             }
 
+            // compute color
+            //let rgb: Rgb<f32> = Rgb::one() - (Rgb::one() / 15.0 * hits as f32);
+            let rgb: Rgb<f32> = Rgb {
+                r: hits as f32 / 15.0,
+                g: hits as f32 / 10.0,
+                b: hits as f32 / 5.0,
+            };
+
+            /*
             // debug color
             let debug_val: Vec3<f32> = direction;
             let rgb = Rgb::<f32> {
@@ -187,6 +206,7 @@ fn main() {
                 g: debug_val.y,
                 b: debug_val.z,
             };
+            */
 
             Rgba::<f32>::from_opaque(rgb)
                 .map(|c| c.clamp(0.0, 1.0))
