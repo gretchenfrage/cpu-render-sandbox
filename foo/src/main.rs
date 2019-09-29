@@ -54,7 +54,7 @@ fn main() {
                 .reduce_and());
 
             // calculate ray direction for this fragment
-            let direction: Vec3<f32> = {
+            let mut direction: Vec3<f32> = {
                 // calculate view-space angle of the fragment
                 let view_space_angle: Vec2<f32> = xy_balanced
                     .map(|n| n.sin() * state.cam_fov);
@@ -67,7 +67,7 @@ fn main() {
             debug_assert!((direction.magnitude() - 1.0).abs() < 0.00001);
 
             // calculate voxel coordinate and ingress
-            let (voxel, ingress) = {
+            let (mut voxel, mut ingress) = {
                 let voxel_f32: Vec3<f32> = state.cam_pos.floor();
                 let ingress: Vec3<f32> = (state.cam_pos
                     - voxel_f32
@@ -112,6 +112,7 @@ fn main() {
                         )
                     );
 
+                    dbg!((a, distances[a], planes[a], ingress[a], direction[a]));
                     debug_assert!(distances[a] >= 0.0);
                 }
 
@@ -133,6 +134,67 @@ fn main() {
                         distances[a] == 0.0,
                     );
                 }
+
+                let mut seq_ingress: [Vec3<f32>; 3] = [Vec3::new(f32::NAN, f32::NAN, f32::NAN); 3];
+                let mut voxel_delta_accumulator: Vec3<i32> = Vec3::zero();
+
+                for &i in &[0, 1, 2] {
+                    voxel_delta_accumulator += seq_voxel_delta[i];
+
+                    seq_ingress[i] = (
+                        (
+                            ingress + (direction * seq_distance[i])
+                        ) - (
+                            voxel_delta_accumulator.numcast::<f32>().unwrap()
+                        )
+                    );
+
+                    dbg!((
+                        seq_ingress[i],
+                        voxel_delta_accumulator,
+                        ingress,
+                        direction,
+                        seq_distance[i],
+                    ));
+
+                    debug_assert!(seq_ingress[i]
+                        .map(|c| c == 0.0 || c == 1.0)
+                        .reduce_or());
+                    debug_assert!(seq_ingress[i]
+                        .map(|c| c >= 0.0 && c <= 1.0)
+                        .reduce_and());
+                }
+
+                {
+                    #[derive(Debug)]
+                    struct Step {
+                        voxel_delta: Vec3<i32>,
+                        distance: f32,
+                        ingress: Vec3<f32>,
+                    }
+                    let seq = seq_voxel_delta.iter()
+                        .zip(seq_distance.iter()
+                            .zip(seq_ingress.iter()))
+                        .map(|(&voxel_delta, (&distance, &ingress))| Step {
+                            voxel_delta,
+                            distance,
+                            ingress,
+                        })
+                        .collect::<Vec<Step>>();
+                    dbg!((direction, seq));
+                }
+
+                'inner_loop: for &i in &[0, 1, 2] {
+                    if seq_distance[i] == 0.0 {
+                        continue 'inner_loop;
+                    }
+
+                    voxel += seq_voxel_delta[i];
+                    ingress = seq_ingress[i];
+
+                    println!("shazam!");
+                }
+
             }
 
             // debug color
