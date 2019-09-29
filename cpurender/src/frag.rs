@@ -13,7 +13,7 @@ pub fn fragment<F: Fn(Vec2<i32>) -> Rgba<u8> + Send + Sync + 'static>(
     fragment: F,
 ) {
     // delegate
-    fragment_state(
+    fragment_stateful(
         x_size,
         y_size,
         (),
@@ -25,7 +25,7 @@ pub fn fragment<F: Fn(Vec2<i32>) -> Rgba<u8> + Send + Sync + 'static>(
 /// function will have read-access to some shared state.
 ///
 /// This uses rayon for parallelism.
-pub fn fragment_state<S, F>(
+pub fn fragment_stateful<S, F>(
     x_size: usize,
     y_size: usize,
     state: S,
