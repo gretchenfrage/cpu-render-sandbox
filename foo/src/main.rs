@@ -19,6 +19,10 @@ fn zero_respecting_signum(n: f32) -> f32 {
     n.signum() * (n != 0.0) as i32 as f32
 }
 
+fn approx_eq(a: f32, b: f32) -> bool {
+    (a - b).abs() < 0.00001
+}
+
 fn main() {
     let x_len = 500;
     let y_len = 500;
@@ -64,7 +68,7 @@ fn main() {
                     * Quaternion::rotation_x(-view_space_angle.y)
                     * state.cam_dir
             };
-            debug_assert!((direction.magnitude() - 1.0).abs() < 0.00001);
+            debug_assert!(approx_eq(direction.magnitude(), 1.0));
 
             // calculate voxel coordinate and ingress
             let (mut voxel, mut ingress) = {
@@ -112,7 +116,6 @@ fn main() {
                         )
                     );
 
-                    dbg!((a, distances[a], planes[a], ingress[a], direction[a]));
                     debug_assert!(distances[a] >= 0.0);
                 }
 
@@ -135,66 +138,46 @@ fn main() {
                     );
                 }
 
-                let mut seq_ingress: [Vec3<f32>; 3] = [Vec3::new(f32::NAN, f32::NAN, f32::NAN); 3];
-                let mut voxel_delta_accumulator: Vec3<i32> = Vec3::zero();
+                // i have just discovered an oversight of the original algorithm, in which the
+                // sequence of voxels that a ray collides with may have the same voxel delta
+                // more than once in a row (this is actually very common).
+                //
+                // we are modifying the algorithm such that we only hit the first element in the
+                // sequence before resuming the loop. the other option would be to consider
+                // elements in the sequence non-valid if their `seq_ingress` value, as computed
+                // by the former version of the algorithm, had any component outside of the
+                // valid 0 <= n <= 1 range. however, that would drastically decrease the
+                // branch-predictability of the step's is-present check. conversely, by intersecting
+                // with the first valid element, we eliminate the branch altogether,
+                // which is excellent.
 
-                for &i in &[0, 1, 2] {
-                    voxel_delta_accumulator += seq_voxel_delta[i];
+                // only the 0th element of the sequence can be absent, since absence is
+                // represented with a distance of 0, and the sequence is sorted/deduped by
+                // distance. therefore, if the 0th element of the sequence is absent, the
+                // first present index is 1, otherwise, that index is 0.
+                let hit_index: usize = (distances[0] == 0.0) as usize;
 
-                    seq_ingress[i] = (
-                        (
-                            ingress + (direction * seq_distance[i])
-                        ) - (
-                            voxel_delta_accumulator.numcast::<f32>().unwrap()
-                        )
-                    );
+                debug_assert!(distances[hit_index] != 0.0);
 
-                    dbg!((
-                        seq_ingress[i],
-                        voxel_delta_accumulator,
-                        ingress,
-                        direction,
-                        seq_distance[i],
-                    ));
+                // the following code becomes much simpler, now that we have eliminated the
+                // inner loop.
+                ingress = (
+                    (
+                        ingress + (direction * seq_distance[hit_index])
+                    ) - (
+                        seq_voxel_delta[hit_index].numcast::<f32>().unwrap()
+                    )
+                );
+                voxel += seq_voxel_delta[hit_index];
 
-                    debug_assert!(seq_ingress[i]
-                        .map(|c| c == 0.0 || c == 1.0)
-                        .reduce_or());
-                    debug_assert!(seq_ingress[i]
-                        .map(|c| c >= 0.0 && c <= 1.0)
-                        .reduce_and());
-                }
+                debug_assert!(ingress
+                    .map(|c| approx_eq(c, 0.0) || approx_eq(c, 1.0))
+                    .reduce_or());
+                debug_assert!(ingress
+                    .map(|c| c >= -0.00001 && c <= 1.00001)
+                    .reduce_and());
 
-                {
-                    #[derive(Debug)]
-                    struct Step {
-                        voxel_delta: Vec3<i32>,
-                        distance: f32,
-                        ingress: Vec3<f32>,
-                    }
-                    let seq = seq_voxel_delta.iter()
-                        .zip(seq_distance.iter()
-                            .zip(seq_ingress.iter()))
-                        .map(|(&voxel_delta, (&distance, &ingress))| Step {
-                            voxel_delta,
-                            distance,
-                            ingress,
-                        })
-                        .collect::<Vec<Step>>();
-                    dbg!((direction, seq));
-                }
-
-                'inner_loop: for &i in &[0, 1, 2] {
-                    if seq_distance[i] == 0.0 {
-                        continue 'inner_loop;
-                    }
-
-                    voxel += seq_voxel_delta[i];
-                    ingress = seq_ingress[i];
-
-                    println!("shazam!");
-                }
-
+                // println!("shazam! {:#?}", (ingress, voxel));
             }
 
             // debug color

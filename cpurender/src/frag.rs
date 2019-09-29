@@ -46,7 +46,7 @@ pub fn fragment_stateful<S, F>(
             (0..x_size).into_par_iter()
                 .flat_map(|x| (0..y_size).into_par_iter()
                     .map(move |y| (x, y)))
-                .collect::<Vec<_>>().into_iter() // sequential for debug
+                // .collect::<Vec<_>>().into_iter() // sequential for debug
                 .for_each(move |(x, y)| {
 
                     // paint
