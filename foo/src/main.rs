@@ -49,6 +49,24 @@ unsafe fn unwrap_unchecked<T>(opt: Option<T>) -> T {
     }
 }
 
+macro_rules! unroll {
+    {
+        for $var:pat in [
+            $(
+                $elem:expr
+            ),*
+            $(,)?
+        ] $body:block
+    } => {{
+        $(
+        {
+            let $var = $elem;
+            $body;
+        }
+        )*
+    }};
+}
+
 fn main() {
     let x_len = 1000;
     let y_len = 1000;
@@ -148,7 +166,7 @@ fn main() {
 
                 let mut distances: [float; 3] = [NAN; 3];
 
-                for &a in &[0, 1, 2] {
+                unroll! { for a in [0, 1, 2] {
                     debug_assert!(planes[a] != ingress[a] || direction[a] == 0.0);
 
                     distances[a] = (
@@ -164,13 +182,13 @@ fn main() {
                     );
 
                     debug_assert!(distances[a] >= 0.0);
-                }
+                }};
 
                 let mut seq_distance: [float; 3] = [0.0; 3];
                 let mut seq_voxel_delta: [Vec3<i32>; 3] = [Vec3::zero(); 3];
 
                 // sort seq, with equal-distance merging
-                for &(a, b, c) in &[(0, 1, 2), (1, 2, 0), (2, 0, 1)] {
+                unroll!{ for (a, b, c) in [(0, 1, 2), (1, 2, 0), (2, 0, 1)] {
                     let index: usize = (
                         (distances[a] > distances[b]) as usize
                             + (distances[a] > distances[c]) as usize
@@ -184,7 +202,7 @@ fn main() {
                         direction[a] == 0.0,
                         distances[a] == 0.0,
                     );
-                }
+                }};
 
                 // find index of first present element in seq
                 let hit_index: usize = (
@@ -197,7 +215,7 @@ fn main() {
 
                 // merge elements into the hit index if they're approx eq
                 // to allow for fp errors
-                for &b in &[2, 1] {
+                unroll!{ for b in [2, 1] {
                     // special epsilon, , for reasons
                     let epsilon: float = 0.00001;
 
@@ -219,7 +237,7 @@ fn main() {
                     seq_distance[a] = seq_distance[(
                         a + should_merge as usize
                     )];
-                }
+                }};
 
                 debug_assert!(seq_distance[hit_index] != 0.0);
 
