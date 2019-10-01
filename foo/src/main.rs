@@ -28,6 +28,10 @@ fn approx_eq(a: float, b: float) -> bool {
     (a - b).abs() < 0.00001
 }
 
+fn square(x: f32) -> f32 {
+    x * x
+}
+
 fn main() {
     let x_len = 1000;
     let y_len = 1000;
@@ -39,16 +43,8 @@ fn main() {
     }
 
     let state = State {
-
-        //cam_pos: Vec3::back_lh() * 10.0,
         cam_dir: Vec3::new(1.0, -1.0, 1.0).normalized(),
-
         cam_pos: Vec3::new(-5.0, 5.0, -5.0),
-        //cam_dir: Vec3::new(0.5, -0.5, 1.0).normalized(),
-
-        //cam_dir: Vec3::new(0.0, 0.0, 1.0),
-        //cam_dir: Vec3::forward_lh(),
-        //cam_fov: 90.0_float.to_radians(),
         cam_fov: (70.0 as float).to_radians(),
     };
 
@@ -74,17 +70,6 @@ fn main() {
                 let perspective_angles = xy_balanced
                     .map(|s| ((state.cam_fov / 2.0).tan() * s).atan());
 
-
-                /*
-                let perspective: Quaternion<f32> = (
-                    Quaternion::rotation_y(perspective_angles.x)
-                        * Quaternion::rotation_x(-perspective_angles.y)
-                );
-                */
-
-
-                //let perspective: Quaternion<f32> = Quaternion::identity();
-
                 let f = (state.cam_fov / 2.0).tan() / (45.0 as float).to_radians().tan();
                 let perspective: Quaternion<float> = Quaternion::rotation_from_to_3d(
                     Vec3::new(0.0, 0.0, 1.0),
@@ -95,31 +80,6 @@ fn main() {
                     ).normalized(),
                 );
 
-                /*
-                let view: Quaternion<f32> = Quaternion::rotation_from_to_3d(
-                    Vec3::forward_lh(),
-                    state.cam_dir,
-                );
-                */
-
-                fn square(x: f32) -> f32 {
-                    x * x
-                }
-
-
-                /*
-                let view: Quaternion<f32> = {
-                    // see: https://math.stackexchange.com/questions/470112/calculate-camera-pitch-yaw-to-face-point
-                    let yaw: f32 = state.cam_dir.y.atan2(state.cam_dir.x);
-                    let pitch: f32 = (
-                            square(state.cam_dir.x) + square(state.cam_dir.y)
-                        )
-                        .sqrt()
-                        .atan2(state.cam_dir.z);
-                    Quaternion::rotation_y(yaw) * Quaternion::rotation_x(pitch)
-                };
-                */
-
                 let view: Quaternion<f32> = {
                     // see: https://math.stackexchange.com/questions/470112/calculate-camera-pitch-yaw-to-face-point
                     let yaw: f32 = state.cam_dir.z.atan2(state.cam_dir.x);
@@ -129,72 +89,7 @@ fn main() {
                     Quaternion::rotation_y(yaw) * Quaternion::rotation_x(-pitch)
                 };
 
-
                 view * perspective * Vec3::forward_lh()
-
-                /*
-                state.cam_dir * (Quaternion::rotation_y(perspective_angles.x)
-                    * Quaternion::rotation_x(-perspective_angles.y))
-                */
-
-                    //.map(|c| c.atan() * (state.cam_fov / (90.0 as float).to_radians()));
-
-                /*
-                let cam_dir_rotation: Mat4<f32> = Mat4::rotation_from_to_3d(
-                    Vec3::forward_lh(),
-                    state.cam_dir,
-                );
-                */
-
-                /*
-                let view_space_dir: Vec4<f32> = Vec4::from_direction(Vec3::new(
-                    perspective_angles.x,
-                    perspective_angles.y,
-                    1.0
-                ).normalized());
-                */
-                /*
-                let view_space_dir: Vec4<f32> = Vec4::from_direction(Vec3::new(
-                    xy_balanced.x,
-                    xy_balanced.y,
-                    1.0
-                ).normalized());
-                */
-
-                //// Vec3::from(cam_dir_rotation * view_space_dir)
-
-                /*
-                Quaternion::rotation_y(perspective_angles .x)
-                    * Quaternion::rotation_x(-perspective_angles .y)
-                    * state.cam_dir
-                */
-
-                /*
-                // calculate view-space angle of the fragment
-                let view_space_angle: Vec2<float> = xy_balanced // question: am i dumnmby? check my trig
-                    .map(|n| n.sin() * state.cam_fov / 2.0);
-
-                // apply that rotation to the cam dir
-
-                let cam_dir_rotation: Mat4<f32> = Mat4::rotation_from_to_3d(
-                    Vec3::forward_lh(),
-                    state.cam_dir,
-                );
-
-                let view_space_dir: Vec4<f32> = Vec4::from_direction(Vec3::new(
-                    view_space_angle.x,
-                    view_space_angle.y,
-                    1.0
-                ).normalized());
-
-                Vec3::from(cam_dir_rotation * view_space_dir)
-
-                /*
-                (Quaternion::rotation_y(view_space_angle.x)
-                    * Quaternion::rotation_x(-view_space_angle.y))
-                    * state.cam_dir
-                    */
-                    */
             };
             debug_assert!(approx_eq(direction.magnitude(), 1.0));
 
