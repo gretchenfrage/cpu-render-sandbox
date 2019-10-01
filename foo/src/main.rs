@@ -33,8 +33,8 @@ fn square(x: float) -> float {
 }
 
 fn main() {
-    let x_len = 500;
-    let y_len = 500;
+    let x_len = 1000;
+    let y_len = 1000;
 
     struct State {
         cam_pos: Vec3<float>,
@@ -43,9 +43,9 @@ fn main() {
     }
 
     let state = State {
-        cam_dir: Vec3::new(1.0, -1.0, 1.0).normalized(),
+        cam_dir: Vec3::new(1.0, -1.0, 2.0).normalized(),
         cam_pos: Vec3::new(-5.0, 5.0, -5.0),
-        cam_fov: (70.0 as float).to_radians(),
+        cam_fov: (100.0 as float).to_radians(),
     };
 
     fragment_stateful(
@@ -67,9 +67,6 @@ fn main() {
 
             // calculate ray direction for this fragment
             let mut direction: Vec3<float> = {
-                let perspective_angles = xy_balanced
-                    .map(|s| ((state.cam_fov / 2.0).tan() * s).atan());
-
                 let f = (state.cam_fov / 2.0).tan() / (45.0 as float).to_radians().tan();
                 let perspective: Quaternion<float> = Quaternion::rotation_from_to_3d(
                     Vec3::new(0.0, 0.0, 1.0),
@@ -107,9 +104,9 @@ fn main() {
                     // with, which would ruin the math. so, in that situation, we
                     // need to set the ingress value to 1.
                     + state.cam_pos.map2(
-                    direction,
-                    |p, d| (p % 1.0 == 0.0 && d < 0.0) as i32 as float
-                )
+                        direction,
+                        |p, d| (p % 1.0 == 0.0 && d < 0.0) as i32 as float
+                    )
                 );
                 (voxel_float.numcast::<i32>().unwrap(), ingress)
             };
@@ -130,9 +127,6 @@ fn main() {
                 let mut distances: [float; 3] = [NAN; 3];
 
                 for &a in &[0, 1, 2] {
-                    if !(planes[a] != ingress[a] || direction[a] == 0.0) {
-                        dbg!((a, xy, planes, ingress, direction));
-                    }
                     debug_assert!(planes[a] != ingress[a] || direction[a] == 0.0);
 
                     distances[a] = (
@@ -180,10 +174,6 @@ fn main() {
                     ) as usize
                 );
 
-                if xy == Vec2::new(250, 2) {
-                    //dbg!((iteration, distances, seq_distance, seq_voxel_delta, hit_index));
-                }
-
                 // merge elements into the hit index if they're approx eq
                 // to allow for fp errors
                 for &b in &[2, 1] {
@@ -196,10 +186,6 @@ fn main() {
                         a >= hit_index
                             && (seq_distance[a] - seq_distance[b]).abs() < epsilon
                     );
-
-                    if xy == Vec2::new(250, 2) {
-                        //dbg!((a, b, should_merge));
-                    }
 
                     seq_voxel_delta[a] += (
                         (
@@ -231,13 +217,6 @@ fn main() {
 
                 voxel += seq_voxel_delta[hit_index];
 
-                if !ingress
-                    .map(|c| approx_eq(c, 0.0) || approx_eq(c, 1.0))
-                    .reduce_or() || !ingress
-                    .map(|c| c >= -0.00001 && c <= 1.00001)
-                    .reduce_and() {
-                    dbg!(ingress);
-                }
                 debug_assert!(ingress
                     .map(|c| approx_eq(c, 0.0) || approx_eq(c, 1.0))
                     .reduce_or());
@@ -267,58 +246,17 @@ fn main() {
                         false => 1,
                     };
 
-                    /*
-                    let mut incr = 0;
-                    let vd = seq_voxel_delta[hit_index];
-                    for i in 0_usize..3_usize {
-                        let v1 = voxel;
-                        let mut v2 = voxel;
-                        v2[i] -= vd[i];
-                        if v1 != v2 {
-                            if in_grid(v1) ^ in_grid(v2) {
-                                incr += 1;
-                            }
-                        }
-                    }
-                    */
-
-                    if incr != 1 {
-                        dbg!((incr, ingress, voxel));
-                    }
-
                     hits += incr;
-                    //hits += seq_voxel_delta[hit_index].reduce(|a, b| a.abs() + b.abs());
-                    /*
-                    hits += ingress
-                        .map(|c| match approx_eq(c, 0.0) || approx_eq(c, 1.0) {
-                            true => 1,
-                            false => 0,
-                        })
-                        .reduce(|a, b| a + b);
-                        */
 
                 }
-
-                // println!("shazam! {:#?}", (ingress, voxel));
             }
 
             // compute color
-            //let rgb: Rgb<float> = Rgb::one() - (Rgb::one() / 15.0 * hits as float);
             let rgb: Rgb<float> = Rgb {
                 r: hits as float / 15.0,
                 g: hits as float / 10.0,
                 b: hits as float / 5.0,
             };
-
-            /*
-            // debug color
-            let debug_val: Vec3<float> = direction;
-            let rgb = Rgb::<float> {
-                r: debug_val.x,
-                g: debug_val.y,
-                b: debug_val.z,
-            };
-            */
 
             Rgba::<float>::from_opaque(rgb)
                 .map(|c| c.clamp(0.0, 1.0))
