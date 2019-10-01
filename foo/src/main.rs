@@ -24,12 +24,29 @@ fn zero_respecting_signum(n: float) -> float {
     n.signum() * (n != 0.0) as i32 as float
 }
 
+/// Float equality within epsilon.
 fn approx_eq(a: float, b: float) -> bool {
     (a - b).abs() < 0.00001
 }
 
+/// Power of 2.
 fn square(x: float) -> float {
     x * x
+}
+
+/// UB if None.
+#[cfg(debug_assertions)]
+unsafe fn unwrap_unchecked<T>(opt: Option<T>) -> T {
+    opt.unwrap()
+}
+
+/// UB if None.
+#[cfg(not(debug_assertions))]
+unsafe fn unwrap_unchecked<T>(opt: Option<T>) -> T {
+    match opt {
+        Some(t) => t,
+        None => std::hint::unreachable_unchecked(),
+    }
 }
 
 fn main() {
@@ -56,8 +73,8 @@ fn main() {
             // convert xy from [0, (x|y)_len] to [-1, 1]
             let xy_balanced: Vec2<float> = (
                 (
-                    xy.numcast::<float>().unwrap()
-                        / Vec2::new(x_len, y_len).numcast::<float>().unwrap()
+                    unsafe { unwrap_unchecked(xy.numcast::<float>()) }
+                        / unsafe { unwrap_unchecked(Vec2::new(x_len, y_len).numcast::<float>()) }
                         * 2.0
                 ) - Vec2::one()
             );
@@ -67,12 +84,12 @@ fn main() {
 
             // calculate ray direction for this fragment
             let mut direction: Vec3<float> = {
-                let f = (state.cam_fov / 2.0).tan() / (45.0 as float).to_radians().tan();
+                let fov_coef = (state.cam_fov / 2.0).tan() / (45.0 as float).to_radians().tan();
                 let perspective: Quaternion<float> = Quaternion::rotation_from_to_3d(
                     Vec3::new(0.0, 0.0, 1.0),
                     Vec3::new(
-                        xy_balanced.x * f,
-                        xy_balanced.y * f,
+                        xy_balanced.x * fov_coef,
+                        xy_balanced.y * fov_coef,
                         1.0,
                     ).normalized(),
                 );
@@ -93,22 +110,27 @@ fn main() {
             // calculate voxel coordinate and ingress
             let (mut voxel, mut ingress) = {
                 let voxel_float: Vec3<float> = state.cam_pos.floor();
-                let ingress: Vec3<float> = (state.cam_pos
-                    - voxel_float
-                    // consider the following on all axis:
-                    //
-                    // if direction is negative, then the collision plane will be at
-                    // 0. if the camera position is a multiple or 1, then
-                    // `cam_pos - floor(cam_pos)` will also equal zero. that would cause
-                    // the ingress point to lie in the plane it is casting to intersect
-                    // with, which would ruin the math. so, in that situation, we
-                    // need to set the ingress value to 1.
-                    + state.cam_pos.map2(
-                        direction,
-                        |p, d| (p % 1.0 == 0.0 && d < 0.0) as i32 as float
+                let ingress: Vec3<float> = (
+                    (
+                        state.cam_pos
+                    ) - (
+                        voxel_float
+                    ) + (
+                        // consider the following on all axis:
+                        //
+                        // if direction is negative, then the collision plane will be at
+                        // 0. if the camera position is a multiple or 1, then
+                        // `cam_pos - floor(cam_pos)` will also equal zero. that would cause
+                        // the ingress point to lie in the plane it is casting to intersect
+                        // with, which would ruin the math. so, in that situation, we
+                        // need to set the ingress value to 1.
+                        state.cam_pos.map2(
+                            direction,
+                            |p, d| (p % 1.0 == 0.0 && d < 0.0) as i32 as float
+                        )
                     )
                 );
-                (voxel_float.numcast::<i32>().unwrap(), ingress)
+                (unsafe { unwrap_unchecked(voxel_float.numcast::<i32>()) }, ingress)
             };
             debug_assert!(ingress
                 .map(|c| c >= 0.0 && c <= 1.0)
@@ -168,10 +190,9 @@ fn main() {
                 let hit_index: usize = (
                     (
                         seq_distance[0] == 0.0
-                    ) as usize + (
-                        seq_distance[0] == 0.0
-                            && seq_distance[1] == 0.0
-                    ) as usize
+                    ) as usize * (
+                        (seq_distance[1] == 0.0) as usize * 2
+                    )
                 );
 
                 // merge elements into the hit index if they're approx eq
@@ -183,8 +204,9 @@ fn main() {
                     let a: usize = b - 1;
 
                     let should_merge = (
-                        a >= hit_index
-                            && (seq_distance[a] - seq_distance[b]).abs() < epsilon
+                        a >= hit_index && (
+                            (seq_distance[a] - seq_distance[b]).abs() < epsilon
+                        )
                     );
 
                     seq_voxel_delta[a] += (
@@ -194,13 +216,9 @@ fn main() {
                             should_merge as usize as i32
                         )
                     );
-                    seq_distance[a] = (
-                        (
-                            seq_distance[b] * should_merge as usize as float
-                        ) + (
-                            seq_distance[a] * !should_merge as usize as float
-                        )
-                    ); // TODO: this could be way more optimized
+                    seq_distance[a] = seq_distance[(
+                        a + should_merge as usize
+                    )];
                 }
 
                 debug_assert!(seq_distance[hit_index] != 0.0);
@@ -211,7 +229,7 @@ fn main() {
                     (
                         ingress + (direction * seq_distance[hit_index])
                     ) - (
-                        seq_voxel_delta[hit_index].numcast::<float>().unwrap()
+                        unsafe { unwrap_unchecked(seq_voxel_delta[hit_index].numcast::<float>()) }
                     )
                 );
 
@@ -247,6 +265,10 @@ fn main() {
                     };
 
                     hits += incr;
+
+                    for _ in 0..incr {
+                        //direction = Quaternion::rotation_x((-5.0 as float).to_radians()) * direction;
+                    }
 
                 }
             }
