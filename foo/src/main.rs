@@ -29,8 +29,8 @@ fn approx_eq(a: float, b: float) -> bool {
 }
 
 fn main() {
-    let x_len = 500;
-    let y_len = 500;
+    let x_len = 1000;
+    let y_len = 1000;
 
     struct State {
         cam_pos: Vec3<float>,
@@ -39,11 +39,12 @@ fn main() {
     }
 
     let state = State {
-        cam_pos: Vec3::new(-5.0, 5.0, -5.0),
+        cam_pos: Vec3::new(-5.0, 5.0, -10.0),
         cam_dir: Vec3::new(0.5, -0.5, 1.0).normalized(),
+        //cam_dir: Vec3::new(0.0, 0.0, 1.0),
         //cam_dir: Vec3::forward_lh(),
         //cam_fov: 90.0_float.to_radians(),
-        cam_fov: (90.0 as float).to_radians(),
+        cam_fov: (70.0 as float).to_radians(),
     };
 
     fragment_stateful(
@@ -65,14 +66,102 @@ fn main() {
 
             // calculate ray direction for this fragment
             let mut direction: Vec3<float> = {
+                let perspective_angles = xy_balanced
+                    .map(|s| ((state.cam_fov / 2.0).tan() * s).atan());
+
+                let perspective: Quaternion<f32> = (
+                    Quaternion::rotation_y(perspective_angles.x)
+                        * Quaternion::rotation_x(-perspective_angles.y)
+                );
+
+                /*
+                let view: Quaternion<f32> = Quaternion::rotation_from_to_3d(
+                    Vec3::forward_lh(),
+                    state.cam_dir,
+                );
+                */
+
+                fn square(x: f32) -> f32 {
+                    x * x
+                }
+
+                let view: Quaternion<f32> = {
+                    // see: https://math.stackexchange.com/questions/470112/calculate-camera-pitch-yaw-to-face-point
+                    let yaw: f32 = state.cam_dir.y.atan2(state.cam_dir.x);
+                    let pitch: f32 = (
+                            square(state.cam_dir.x) + square(state.cam_dir.y)
+                        )
+                        .sqrt()
+                        .atan2(state.cam_dir.z);
+                    Quaternion::rotation_y(-yaw) * Quaternion::rotation_x(pitch)
+                };
+
+
+                perspective * view * Vec3::forward_lh()
+
+                /*
+                state.cam_dir * (Quaternion::rotation_y(perspective_angles.x)
+                    * Quaternion::rotation_x(-perspective_angles.y))
+                */
+
+                    //.map(|c| c.atan() * (state.cam_fov / (90.0 as float).to_radians()));
+
+                /*
+                let cam_dir_rotation: Mat4<f32> = Mat4::rotation_from_to_3d(
+                    Vec3::forward_lh(),
+                    state.cam_dir,
+                );
+                */
+
+                /*
+                let view_space_dir: Vec4<f32> = Vec4::from_direction(Vec3::new(
+                    perspective_angles.x,
+                    perspective_angles.y,
+                    1.0
+                ).normalized());
+                */
+                /*
+                let view_space_dir: Vec4<f32> = Vec4::from_direction(Vec3::new(
+                    xy_balanced.x,
+                    xy_balanced.y,
+                    1.0
+                ).normalized());
+                */
+
+                //// Vec3::from(cam_dir_rotation * view_space_dir)
+
+                /*
+                Quaternion::rotation_y(perspective_angles .x)
+                    * Quaternion::rotation_x(-perspective_angles .y)
+                    * state.cam_dir
+                */
+
+                /*
                 // calculate view-space angle of the fragment
-                let view_space_angle: Vec2<float> = xy_balanced
+                let view_space_angle: Vec2<float> = xy_balanced // question: am i dumnmby? check my trig
                     .map(|n| n.sin() * state.cam_fov / 2.0);
 
                 // apply that rotation to the cam dir
-                Quaternion::rotation_y(view_space_angle.x)
-                    * Quaternion::rotation_x(-view_space_angle.y)
+
+                let cam_dir_rotation: Mat4<f32> = Mat4::rotation_from_to_3d(
+                    Vec3::forward_lh(),
+                    state.cam_dir,
+                );
+
+                let view_space_dir: Vec4<f32> = Vec4::from_direction(Vec3::new(
+                    view_space_angle.x,
+                    view_space_angle.y,
+                    1.0
+                ).normalized());
+
+                Vec3::from(cam_dir_rotation * view_space_dir)
+
+                /*
+                (Quaternion::rotation_y(view_space_angle.x)
+                    * Quaternion::rotation_x(-view_space_angle.y))
                     * state.cam_dir
+                    */
+                    */
             };
             debug_assert!(approx_eq(direction.magnitude(), 1.0));
 
@@ -113,7 +202,7 @@ fn main() {
                 let mut distances: [float; 3] = [NAN; 3];
 
                 for &a in &[0, 1, 2] {
-                    debug_assert!(planes[a] != ingress[a]);
+                    debug_assert!(planes[a] != ingress[a] || direction[a] == 0.0);
 
                     distances[a] = (
                         (
@@ -135,16 +224,16 @@ fn main() {
 
                 for &(a, b, c) in &[(0, 1, 2), (1, 2, 0), (2, 0, 1)] {
 
-                    // this index calculation works as a fix
+                    // this index calculation works as a fix to fp-imprecision
                     // by merging steps in the sequence if they're close
                     let index: usize = {
                         // one step may be greater than another, but if its advantage is
                         // no greater than epsilon, it will be merged with the lesser
-                        let epsilon: f32 = 0.000004;
+                        let epsilon: float = 0.000004;
                         (
-                            distances[a] - distances[b] >= epsilon
+                            distances[a] - distances[b] >= -epsilon
                         ) as usize + (
-                            distances[a] - distances[c] >= epsilon
+                            distances[a] - distances[c] >= -epsilon
                         ) as usize - (
                             // however, there is an edge case, in which the points
                             // form the ordered sequence [a, b, c],
@@ -168,6 +257,9 @@ fn main() {
                             )
                         ) as usize
                     };
+
+                    // TODO i see the problem.. there's a failure to double-merge w/ the comp test?
+                    // TODO: what if... we didn't merge, at all, and used math for the combined "deep-"select/merge
 
                     seq_distance[index] = distances[a];
 
@@ -196,9 +288,13 @@ fn main() {
                 // represented with a distance of 0, and the sequence is sorted/deduped by
                 // distance. therefore, if the 0th element of the sequence is absent, the
                 // first present index is 1, otherwise, that index is 0.
-                let hit_index: usize = (distances[0] == 0.0) as usize;
+                let hit_index: usize = (seq_distance[0] == 0.0) as usize;
 
-                debug_assert!(distances[hit_index] != 0.0);
+                if seq_distance[hit_index] == 0.0 {
+                    dbg!((hit_index, seq_distance, distances));
+                }
+
+                debug_assert!(seq_distance[hit_index] != 0.0);
 
                 // the following code becomes much simpler, now that we have eliminated the
                 // inner loop.
