@@ -15,8 +15,8 @@ use cpurender::re::vek::*;
 
 // trick to allow us to easily toggle fp precision
 #[allow(non_camel_case_types)]
-type float = f32;
-const NAN: float = f32::NAN;
+type float = f64;
+const NAN: float = f64::NAN;
 
 /// Rust's float::sign implementation simply extracts the sign bit, which will
 /// consider signum(+0.0)=1.0 and signum(-0.0)=-1.0
@@ -28,13 +28,13 @@ fn approx_eq(a: float, b: float) -> bool {
     (a - b).abs() < 0.00001
 }
 
-fn square(x: f32) -> f32 {
+fn square(x: float) -> float {
     x * x
 }
 
 fn main() {
-    let x_len = 1000;
-    let y_len = 1000;
+    let x_len = 500;
+    let y_len = 500;
 
     struct State {
         cam_pos: Vec3<float>,
@@ -80,10 +80,10 @@ fn main() {
                     ).normalized(),
                 );
 
-                let view: Quaternion<f32> = {
+                let view: Quaternion<float> = {
                     // see: https://math.stackexchange.com/questions/470112/calculate-camera-pitch-yaw-to-face-point
-                    let yaw: f32 = state.cam_dir.z.atan2(state.cam_dir.x);
-                    let pitch: f32 = state.cam_dir.y.atan2(
+                    let yaw: float = state.cam_dir.z.atan2(state.cam_dir.x);
+                    let pitch: float = state.cam_dir.y.atan2(
                         (square(state.cam_dir.x) + square(state.cam_dir.z)).sqrt()
                     );
                     Quaternion::rotation_y(yaw) * Quaternion::rotation_x(-pitch)
@@ -107,9 +107,9 @@ fn main() {
                     // with, which would ruin the math. so, in that situation, we
                     // need to set the ingress value to 1.
                     + state.cam_pos.map2(
-                        direction,
-                        |p, d| (p % 1.0 == 0.0 && d < 0.0) as i32 as float
-                    )
+                    direction,
+                    |p, d| (p % 1.0 == 0.0 && d < 0.0) as i32 as float
+                )
                 );
                 (voxel_float.numcast::<i32>().unwrap(), ingress)
             };
@@ -130,6 +130,9 @@ fn main() {
                 let mut distances: [float; 3] = [NAN; 3];
 
                 for &a in &[0, 1, 2] {
+                    if !(planes[a] != ingress[a] || direction[a] == 0.0) {
+                        dbg!((a, xy, planes, ingress, direction));
+                    }
                     debug_assert!(planes[a] != ingress[a] || direction[a] == 0.0);
 
                     distances[a] = (
@@ -150,44 +153,12 @@ fn main() {
                 let mut seq_distance: [float; 3] = [0.0; 3];
                 let mut seq_voxel_delta: [Vec3<i32>; 3] = [Vec3::zero(); 3];
 
+                // sort seq, with equal-distance merging
                 for &(a, b, c) in &[(0, 1, 2), (1, 2, 0), (2, 0, 1)] {
-
-                    // this index calculation works as a fix to fp-imprecision
-                    // by merging steps in the sequence if they're close
-                    let index: usize = {
-                        // one step may be greater than another, but if its advantage is
-                        // no greater than epsilon, it will be merged with the lesser
-                        let epsilon: float = 0.000004;
-                        (
-                            distances[a] - distances[b] >= -epsilon
-                        ) as usize + (
-                            distances[a] - distances[c] >= -epsilon
-                        ) as usize - (
-                            // however, there is an edge case, in which the points
-                            // form the ordered sequence [a, b, c],
-                            // where:
-                            //     (b - a) <= epsilon
-                            // and:
-                            //     (c - b) <= epsilon
-                            // however:
-                            //     (c - a) > epsilon
-                            //
-                            // in this case, we subtract 1, bringing the index
-                            // from 1 to 0
-                            (
-                                distances[a] > distances[b]
-                                    && distances[b] > distances[c]
-                                    && distances[a] - distances[c] <= epsilon * 2.0
-                            ) || (
-                                distances[a] > distances[c]
-                                    && distances[c] > distances[b]
-                                    && distances[a] - distances[b] <= epsilon * 2.0
-                            )
-                        ) as usize
-                    };
-
-                    // TODO i see the problem.. there's a failure to double-merge w/ the comp test?
-                    // TODO: what if... we didn't merge, at all, and used math for the combined "deep-"select/merge
+                    let index: usize = (
+                        (distances[a] > distances[b]) as usize
+                            + (distances[a] > distances[c]) as usize
+                    );
 
                     seq_distance[index] = distances[a];
 
@@ -199,27 +170,51 @@ fn main() {
                     );
                 }
 
-                // i have just discovered an oversight of the original algorithm, in which the
-                // sequence of voxels that a ray collides with may have the same voxel delta
-                // more than once in a row (this is actually very common).
-                //
-                // we are modifying the algorithm such that we only hit the first element in the
-                // sequence before resuming the loop. the other option would be to consider
-                // elements in the sequence non-valid if their `seq_ingress` value, as computed
-                // by the former version of the algorithm, had any component outside of the
-                // valid 0 <= n <= 1 range. however, that would drastically decrease the
-                // branch-predictability of the step's is-present check. conversely, by intersecting
-                // with the first valid element, we eliminate the branch altogether,
-                // which is excellent.
+                // find index of first present element in seq
+                let hit_index: usize = (
+                    (
+                        seq_distance[0] == 0.0
+                    ) as usize + (
+                        seq_distance[0] == 0.0
+                            && seq_distance[1] == 0.0
+                    ) as usize
+                );
 
-                // only the 0th element of the sequence can be absent, since absence is
-                // represented with a distance of 0, and the sequence is sorted/deduped by
-                // distance. therefore, if the 0th element of the sequence is absent, the
-                // first present index is 1, otherwise, that index is 0.
-                let hit_index: usize = (seq_distance[0] == 0.0) as usize;
+                if xy == Vec2::new(250, 2) {
+                    //dbg!((iteration, distances, seq_distance, seq_voxel_delta, hit_index));
+                }
 
-                if seq_distance[hit_index] == 0.0 {
-                    // dbg!((hit_index, seq_distance, distances));
+                // merge elements into the hit index if they're approx eq
+                // to allow for fp errors
+                for &b in &[2, 1] {
+                    // special epsilon, , for reasons
+                    let epsilon: float = 0.00001;
+
+                    let a: usize = b - 1;
+
+                    let should_merge = (
+                        a >= hit_index
+                            && (seq_distance[a] - seq_distance[b]).abs() < epsilon
+                    );
+
+                    if xy == Vec2::new(250, 2) {
+                        //dbg!((a, b, should_merge));
+                    }
+
+                    seq_voxel_delta[a] += (
+                        (
+                            seq_voxel_delta[b]
+                        ) * (
+                            should_merge as usize as i32
+                        )
+                    );
+                    seq_distance[a] = (
+                        (
+                            seq_distance[b] * should_merge as usize as float
+                        ) + (
+                            seq_distance[a] * !should_merge as usize as float
+                        )
+                    );
                 }
 
                 debug_assert!(seq_distance[hit_index] != 0.0);
@@ -251,10 +246,56 @@ fn main() {
                     .reduce_and());
 
                 // collision
-                if voxel.partial_cmpge(&Vec3::new(0, 0, 0)).reduce_and() &&
-                    voxel.partial_cmplt(&Vec3::new(5, 5, 5)).reduce_and() {
+                fn in_grid(v: Vec3<i32>) -> bool {
+                    v.partial_cmpge(&Vec3::new(0, 0, 0)).reduce_and()
+                        && v.partial_cmplt(&Vec3::new(5, 5, 5)).reduce_and()
+                }
 
-                    hits += 1;
+                if in_grid(voxel) {
+
+                    // this could be better optimized, but it's to only count external
+                    // edges once
+                    let incr = match in_grid(voxel - seq_voxel_delta[hit_index]) {
+                        true => {
+                            ingress
+                                .map(|c| match approx_eq(c, 0.0) || approx_eq(c, 1.0) {
+                                    true => 1,
+                                    false => 0,
+                                })
+                                .reduce(|a, b| a + b)
+                        },
+                        false => 1,
+                    };
+
+                    /*
+                    let mut incr = 0;
+                    let vd = seq_voxel_delta[hit_index];
+                    for i in 0_usize..3_usize {
+                        let v1 = voxel;
+                        let mut v2 = voxel;
+                        v2[i] -= vd[i];
+                        if v1 != v2 {
+                            if in_grid(v1) ^ in_grid(v2) {
+                                incr += 1;
+                            }
+                        }
+                    }
+                    */
+
+                    if incr != 1 {
+                        dbg!((incr, ingress, voxel));
+                    }
+
+                    hits += incr;
+                    //hits += seq_voxel_delta[hit_index].reduce(|a, b| a.abs() + b.abs());
+                    /*
+                    hits += ingress
+                        .map(|c| match approx_eq(c, 0.0) || approx_eq(c, 1.0) {
+                            true => 1,
+                            false => 0,
+                        })
+                        .reduce(|a, b| a + b);
+                        */
 
                 }
 
