@@ -15,8 +15,8 @@ use cpurender::re::vek::*;
 
 // trick to allow us to easily toggle fp precision
 #[allow(non_camel_case_types)]
-type float = f64;
-const NAN: float = f64::NAN;
+type float = f32;
+const NAN: float = f32::NAN;
 
 /// Rust's float::sign implementation simply extracts the sign bit, which will
 /// consider signum(+0.0)=1.0 and signum(-0.0)=-1.0
@@ -200,7 +200,7 @@ fn main() {
                         ) + (
                             seq_distance[a] * !should_merge as usize as float
                         )
-                    );
+                    ); // TODO: this could be way more optimized
                 }
 
                 debug_assert!(seq_distance[hit_index] != 0.0);
