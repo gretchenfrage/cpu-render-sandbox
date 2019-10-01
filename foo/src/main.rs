@@ -39,8 +39,13 @@ fn main() {
     }
 
     let state = State {
-        cam_pos: Vec3::new(-5.0, 5.0, -10.0),
-        cam_dir: Vec3::new(0.5, -0.5, 1.0).normalized(),
+
+        //cam_pos: Vec3::back_lh() * 10.0,
+        cam_dir: Vec3::new(1.0, -1.0, 1.0).normalized(),
+
+        cam_pos: Vec3::new(-5.0, 5.0, -5.0),
+        //cam_dir: Vec3::new(0.5, -0.5, 1.0).normalized(),
+
         //cam_dir: Vec3::new(0.0, 0.0, 1.0),
         //cam_dir: Vec3::forward_lh(),
         //cam_fov: 90.0_float.to_radians(),
@@ -69,9 +74,25 @@ fn main() {
                 let perspective_angles = xy_balanced
                     .map(|s| ((state.cam_fov / 2.0).tan() * s).atan());
 
+
+                /*
                 let perspective: Quaternion<f32> = (
                     Quaternion::rotation_y(perspective_angles.x)
                         * Quaternion::rotation_x(-perspective_angles.y)
+                );
+                */
+
+
+                //let perspective: Quaternion<f32> = Quaternion::identity();
+
+                let f = (state.cam_fov / 2.0).tan() / (45.0 as float).to_radians().tan();
+                let perspective: Quaternion<float> = Quaternion::rotation_from_to_3d(
+                    Vec3::new(0.0, 0.0, 1.0),
+                    Vec3::new(
+                        xy_balanced.x * f,
+                        xy_balanced.y * f,
+                        1.0,
+                    ).normalized(),
                 );
 
                 /*
@@ -85,6 +106,8 @@ fn main() {
                     x * x
                 }
 
+
+                /*
                 let view: Quaternion<f32> = {
                     // see: https://math.stackexchange.com/questions/470112/calculate-camera-pitch-yaw-to-face-point
                     let yaw: f32 = state.cam_dir.y.atan2(state.cam_dir.x);
@@ -93,11 +116,21 @@ fn main() {
                         )
                         .sqrt()
                         .atan2(state.cam_dir.z);
-                    Quaternion::rotation_y(-yaw) * Quaternion::rotation_x(pitch)
+                    Quaternion::rotation_y(yaw) * Quaternion::rotation_x(pitch)
+                };
+                */
+
+                let view: Quaternion<f32> = {
+                    // see: https://math.stackexchange.com/questions/470112/calculate-camera-pitch-yaw-to-face-point
+                    let yaw: f32 = state.cam_dir.z.atan2(state.cam_dir.x);
+                    let pitch: f32 = state.cam_dir.y.atan2(
+                        (square(state.cam_dir.x) + square(state.cam_dir.z)).sqrt()
+                    );
+                    Quaternion::rotation_y(yaw) * Quaternion::rotation_x(-pitch)
                 };
 
 
-                perspective * view * Vec3::forward_lh()
+                view * perspective * Vec3::forward_lh()
 
                 /*
                 state.cam_dir * (Quaternion::rotation_y(perspective_angles.x)
@@ -291,7 +324,7 @@ fn main() {
                 let hit_index: usize = (seq_distance[0] == 0.0) as usize;
 
                 if seq_distance[hit_index] == 0.0 {
-                    dbg!((hit_index, seq_distance, distances));
+                    // dbg!((hit_index, seq_distance, distances));
                 }
 
                 debug_assert!(seq_distance[hit_index] != 0.0);
