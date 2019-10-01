@@ -204,6 +204,33 @@ fn main() {
                     );
                 }};
 
+                let mut hit_index: usize = 2;
+
+                unroll!{ for a in [1, 0] {
+                    let b: usize = a + 1;
+
+                    let dedup_epsilon: float = 0.00001;
+
+                    let a_present: bool = seq_distance[a] != 0.0;
+                    let should_merge: bool = (
+                        a_present
+                            & (
+                            (seq_distance[a] - seq_distance[b]).abs() < dedup_epsilon
+                        )
+                    );
+
+                    hit_index -= a_present as usize;
+                    seq_voxel_delta[a] += (
+                        seq_voxel_delta[b] * (
+                            should_merge as usize as i32
+                        )
+                    );
+                    seq_distance[a] = seq_distance[(
+                        a + should_merge as usize
+                    )];
+                }};
+
+                /*
                 // find index of first present element in seq
                 let hit_index: usize = (
                     (
@@ -238,6 +265,7 @@ fn main() {
                         a + should_merge as usize
                     )];
                 }};
+                */
 
                 debug_assert!(seq_distance[hit_index] != 0.0);
 
