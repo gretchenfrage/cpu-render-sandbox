@@ -230,43 +230,6 @@ fn main() {
                     )];
                 }};
 
-                /*
-                // find index of first present element in seq
-                let hit_index: usize = (
-                    (
-                        seq_distance[0] == 0.0
-                    ) as usize * (
-                        (seq_distance[1] == 0.0) as usize * 2
-                    )
-                );
-
-                // merge elements into the hit index if they're approx eq
-                // to allow for fp errors
-                unroll!{ for b in [2, 1] {
-                    // special epsilon, , for reasons
-                    let epsilon: float = 0.00001;
-
-                    let a: usize = b - 1;
-
-                    let should_merge = (
-                        a >= hit_index && (
-                            (seq_distance[a] - seq_distance[b]).abs() < epsilon
-                        )
-                    );
-
-                    seq_voxel_delta[a] += (
-                        (
-                            seq_voxel_delta[b]
-                        ) * (
-                            should_merge as usize as i32
-                        )
-                    );
-                    seq_distance[a] = seq_distance[(
-                        a + should_merge as usize
-                    )];
-                }};
-                */
-
                 debug_assert!(seq_distance[hit_index] != 0.0);
 
                 // the following code becomes much simpler, now that we have eliminated the
