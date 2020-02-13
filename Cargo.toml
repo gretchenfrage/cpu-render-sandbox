@@ -2,6 +2,8 @@
 members = [
     "cpurender",
     "foo",
+    "faster",
+    "ultraviolet",
 ]
 
 
